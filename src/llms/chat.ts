@@ -2,10 +2,11 @@ import { ChatCompletionCreateParamsNonStreaming } from "groq-sdk/resources/chat/
 import { groq, GROQ_MODEL } from "./groq";
 
 export const generateChatCompletion = async (
-  options: <ChatCompletionCreateParamsNonStreaming, "model">
+  options: Omit<ChatCompletionCreateParamsNonStreaming, "model">
 ) => {
   const response = await groq.chat.completions.create({
     model: GROQ_MODEL,
+    ...options,
   });
   return response.choices[0].message;
 };
