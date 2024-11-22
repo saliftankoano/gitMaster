@@ -10,3 +10,7 @@ export const generateChatCompletion = async (
   });
   return response.choices[0].message;
 };
+
+/**
+ * Another example of a chat completion
+ */
