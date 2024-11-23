@@ -29,8 +29,11 @@ import { getGitFile } from "./reviews";
 
 export const reviewDiff = async (messages: ChatCompletionMessageParam[]) => {
   const message = await generateChatCompletion({
-    messages,
+    options: { messages },
   });
+  if ("error" in message) {
+    throw message.error;
+  }
   return message.content;
 };
 
@@ -423,14 +426,19 @@ export const generateInlineComments = async (
 ): Promise<CodeSuggestion> => {
   try {
     const messages = getInlineFixPrompt(file.current_contents, suggestion);
-    const { function_call } = await generateChatCompletion({
-      messages,
-      functions: [INLINE_FIX_FUNCTION],
-      function_call: { name: INLINE_FIX_FUNCTION.name },
+    const response = await generateChatCompletion({
+      options: {
+        messages,
+        functions: [INLINE_FIX_FUNCTION],
+        function_call: { name: INLINE_FIX_FUNCTION.name },
+      },
     });
-    if (!function_call) {
+
+    if ("error" in response || !("function_call" in response)) {
       throw new Error("No function call found");
     }
+
+    const { function_call } = response;
     const args = JSON.parse(function_call.arguments);
     const initialCode = String.raw`${args["code"]}`;
     const indentedCode = indentCodeFix(

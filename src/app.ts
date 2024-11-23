@@ -7,7 +7,7 @@ import { Review } from "./constants";
 import { env } from "./env";
 import { processPullRequest } from "./review-agent";
 import { applyReview } from "./reviews";
-
+import { generateChatCompletion } from "./llms/chat";
 /**
  * SAMPLE TESTING APP
  */
@@ -21,20 +21,67 @@ const reviewApp = new App({
 /**
  * SAMPLE TESTING APP
  */
-const getChangesPerFile = async (payload: WebhookEventMap["pull_request"]) => {
+const getFileContent = async (
+  octokit: InstanceType<typeof App>["octokit"],
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string
+) => {
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref,
+    });
+
+    if ("content" in data) {
+      // Decode the file content (it's base64-encoded)
+      return Buffer.from(data.content, "base64").toString("utf-8");
+    }
+
+    return null; // In case the data does not contain content
+  } catch (exc) {
+    console.error(`Failed to fetch content for ${path}`, exc);
+    return null;
+  }
+};
+
+const getChangesWithFullContext = async (
+  payload: WebhookEventMap["pull_request"]
+) => {
   try {
     const octokit = await reviewApp.getInstallationOctokit(
       payload.installation.id
     );
+
     const { data: files } = await octokit.rest.pulls.listFiles({
       owner: payload.repository.owner.login,
       repo: payload.repository.name,
       pull_number: payload.pull_request.number,
     });
-    console.dir({ files }, { depth: null });
-    return files;
+
+    const fileContexts = await Promise.all(
+      files.map(async (file) => {
+        const content = await getFileContent(
+          octokit,
+          payload.repository.owner.login,
+          payload.repository.name,
+          file.filename,
+          payload.pull_request.head.sha
+        );
+        return {
+          ...file,
+          fullContent: content,
+        };
+      })
+    );
+
+    console.dir({ fileContexts }, { depth: null });
+    return fileContexts;
   } catch (exc) {
-    console.log("exc");
+    console.error("Error fetching files with context:", exc);
     return [];
   }
 };
@@ -50,25 +97,27 @@ async function handlePullRequestOpened({
   console.log(
     `Received a pull request event for #${payload.pull_request.number}`
   );
-  // const reposWithInlineEnabled = new Set<number>([601904706, 701925328]);
-  // const canInlineSuggest = reposWithInlineEnabled.has(payload.repository.id);
+
   try {
-    console.log("pr info", {
+    console.log("PR info", {
       id: payload.repository.id,
       fullName: payload.repository.full_name,
       url: payload.repository.html_url,
     });
-    const files = await getChangesPerFile(payload);
+
+    const fileContexts = await getChangesWithFullContext(payload);
+
     const review: Review = await processPullRequest(
       octokit,
       payload,
-      files,
-      true
+      fileContexts,
+      true // Assuming this indicates including full context
     );
+
     await applyReview({ octokit, payload, review });
     console.log("Review Submitted");
   } catch (exc) {
-    console.log(exc);
+    console.error(exc);
   }
 }
 
