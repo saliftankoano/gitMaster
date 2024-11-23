@@ -2,24 +2,6 @@ import { AbstractParser, EnclosingContext } from "../../constants";
 import * as parser from "@babel/parser";
 import traverse, { NodePath, Node } from "@babel/traverse";
 
-const processNode = (
-  path: NodePath<Node>,
-  lineStart: number,
-  lineEnd: number,
-  largestSize: number,
-  largestEnclosingContext: Node | null
-) => {
-  const { start, end } = path.node.loc;
-  if (start.line <= lineStart && lineEnd <= end.line) {
-    const size = end.line - start.line;
-    if (size > largestSize) {
-      largestSize = size;
-      largestEnclosingContext = path.node;
-    }
-  }
-  return { largestSize, largestEnclosingContext };
-};
-
 export class JavascriptParser implements AbstractParser {
   findEnclosingContext(
     file: string,
@@ -30,36 +12,30 @@ export class JavascriptParser implements AbstractParser {
       sourceType: "module",
       plugins: ["jsx", "typescript"], // To allow JSX and TypeScript
     });
-    let largestEnclosingContext: Node = null;
-    let largestSize = 0;
+
+    let enclosingContext: Node = null;
+
     traverse(ast, {
-      Function(path) {
-        ({ largestSize, largestEnclosingContext } = processNode(
-          path,
-          lineStart,
-          lineEnd,
-          largestSize,
-          largestEnclosingContext
-        ));
-      },
-      TSInterfaceDeclaration(path) {
-        ({ largestSize, largestEnclosingContext } = processNode(
-          path,
-          lineStart,
-          lineEnd,
-          largestSize,
-          largestEnclosingContext
-        ));
+      enter(path) {
+        const { start, end } = path.node.loc || {};
+        if (start && end && start.line <= lineStart && lineEnd <= end.line) {
+          // Capture the first matching enclosing context
+          if (!enclosingContext) {
+            enclosingContext = path.node;
+          }
+        }
       },
     });
+
+    // If no specific context is found, return the entire AST as context
     return {
-      enclosingContext: largestEnclosingContext,
+      enclosingContext: enclosingContext || ast,
     } as EnclosingContext;
   }
 
   dryRun(file: string): { valid: boolean; error: string } {
     try {
-      const ast = parser.parse(file, {
+      parser.parse(file, {
         sourceType: "module",
         plugins: ["jsx", "typescript"], // To allow JSX and TypeScript
       });
@@ -70,7 +46,7 @@ export class JavascriptParser implements AbstractParser {
     } catch (exc) {
       return {
         valid: false,
-        error: exc,
+        error: exc.toString(),
       };
     }
   }
