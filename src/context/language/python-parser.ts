@@ -7,7 +7,7 @@ export class PythonParser implements AbstractParser {
     lineStart: number,
     lineEnd: number
   ): EnclosingContext {
-    const pythonScript = "./path/to/python_ast_parser.py"; // Adjust the path
+    const pythonScript = "./src/test.py"; // Adjust the path
 
     try {
       const result = spawnSync(
