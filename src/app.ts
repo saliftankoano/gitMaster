@@ -7,7 +7,7 @@ import { Review } from "./constants";
 import { env } from "./env";
 import { processPullRequest } from "./review-agent";
 import { applyReview } from "./reviews";
-
+import { generateChatCompletion } from "./llms/chat";
 /**
  * SAMPLE TESTING APP
  */
